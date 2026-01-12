@@ -1,0 +1,34 @@
+openapi: 3.0.1
+info:
+  title: Asset Telematics
+  version: 1.0.0
+paths:
+  /telemetry:
+    post:
+      summary: Send Telemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetTelematics"
+      # FIX: Added required responses block
+      responses:
+        "202":
+          description: Telemetry Accepted
+components:
+  schemas:
+    AssetTelematics:
+      type: object
+      properties:
+        AssetId:
+          type: string
+        Voltage:
+          type: number
+        Current:
+          type: number
+        Temperature:
+          type: number
+        Timestamp:
+          type: string
+          format: date-time
