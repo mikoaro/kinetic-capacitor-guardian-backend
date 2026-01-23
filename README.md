@@ -16,7 +16,7 @@ The **Kinetic Capacitor Guardian** is an autonomous "immune system" for the **Ko
 
 ![Kinetic Capacitor Guardian - 2](./screenshots/1.png)
 
-[Kinetic Capacitor Guardian - Simulator Gateway](https://crm-kinetic-backend-be3-80514976508.us-central1.run.app)
+[Kinetic Capacitor Guardian Backend and Simulator Gateway](https://crm-kinetic-backend-be3-80514976508.us-central1.run.app)
 
 ![Kinetic Capacitor Guardian - 3](./screenshots/2.png)
 
