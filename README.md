@@ -10,6 +10,15 @@ The **Kinetic Capacitor Guardian** is an autonomous "immune system" for the **Ko
 
 ---
 
+[Kinetic Capacitor Guardian Frontend and PWA Digital Twin](https://kinetic-guardian-frontend-80514976508.us-central1.run.app/)
+
+![Kinetic Capacitor Guardian - 1](./screenshots/0.png)
+
+![Kinetic Capacitor Guardian - 2](./screenshots/1.png)
+
+![Kinetic Capacitor Guardian - 3](./screenshots/2.png)
+
+
 ## 🏗️ System Architecture
 
 The solution utilizes a **Hub & Spoke** architectural pattern to decouple heavy data processing from the user experience and autonomous action layers.
