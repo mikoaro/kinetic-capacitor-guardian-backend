@@ -1,0 +1,91 @@
+public with sharing class EinsteinVisionService {
+    
+    // CONFIGURATION
+    private static final String GOOGLE_VISION_URL = 'https://vision.googleapis.com/v1/images:annotate';
+    
+    public static Boolean predictThreat(String base64Image) {
+        String apiKey = getApiKey();
+        
+        // Safety Checks
+        if (String.isBlank(base64Image) || String.isBlank(apiKey)) {
+            return false;
+        }
+
+        // 1. Prepare JSON Payload for Google Vision
+        Map<String, Object> imageMap = new Map<String, Object>();
+        imageMap.put('content', base64Image);
+        
+        Map<String, Object> featureMap = new Map<String, Object>();
+        featureMap.put('type', 'LABEL_DETECTION');
+        featureMap.put('maxResults', 10);
+        
+        Map<String, Object> requestMap = new Map<String, Object>();
+        requestMap.put('image', imageMap);
+        requestMap.put('features', new List<Object>{ featureMap });
+        
+        Map<String, Object> rootMap = new Map<String, Object>();
+        rootMap.put('requests', new List<Object>{ requestMap });
+        
+        // 2. HTTP Request
+        HttpRequest req = new HttpRequest();
+        req.setMethod('POST');
+        req.setEndpoint(GOOGLE_VISION_URL + '?key=' + apiKey);
+        req.setHeader('Content-Type', 'application/json');
+        req.setBody(JSON.serialize(rootMap));
+        req.setTimeout(10000); 
+        
+        Http http = new Http();
+        try {
+            HttpResponse res = http.send(req);
+            if (res.getStatusCode() == 200) {
+                return parseGoogleResponse(res.getBody());
+            }
+        } catch (Exception e) {
+            System.debug('Google Vision Exception: ' + e.getMessage());
+        }
+        return false; 
+    }
+    
+    private static Boolean parseGoogleResponse(String jsonResponse) {
+        Map<String, Object> root = (Map<String, Object>) JSON.deserializeUntyped(jsonResponse);
+        List<Object> responses = (List<Object>) root.get('responses');
+        
+        if (responses != null && !responses.isEmpty()) {
+            Map<String, Object> resp = (Map<String, Object>) responses[0];
+            List<Object> annotations = (List<Object>) resp.get('labelAnnotations');
+            
+            if (annotations != null) {
+                for (Object obj : annotations) {
+                    Map<String, Object> label = (Map<String, Object>) obj;
+                    
+                    // FIXED: Renamed 'desc' to 'descriptionValue' to avoid keyword conflict
+                    String descriptionValue = ((String) label.get('description')).toLowerCase();
+                    Decimal score = (Decimal) label.get('score');
+                    
+                    // THREAT LOGIC: Check for Smoke/Fire with > 80% confidence
+                    if ((descriptionValue.contains('smoke') || descriptionValue.contains('fire')) && score > 0.80) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static String getApiKey() {
+        try {
+            Einstein_Settings__mdt settings = [
+                SELECT Token__c 
+                FROM Einstein_Settings__mdt 
+                WHERE DeveloperName = 'Default' 
+                LIMIT 1
+            ];
+            if (settings != null) {
+                return settings.Token__c;
+            }
+        } catch (Exception e) {
+            System.debug('Metadata Query Error: ' + e.getMessage());
+        }
+        return null;
+    }
+}

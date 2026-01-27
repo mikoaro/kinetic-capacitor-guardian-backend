@@ -1,0 +1,45 @@
+@RestResource(urlMapping='/AgentforceVoice/*')
+global with sharing class AgentforceVoiceService {
+    @HttpPost
+    global static VoiceResponse handleVoiceCommand(String transcript, String assetId) {
+        VoiceResponse response = new VoiceResponse();
+        response.textResponse = invokeAgentEngine(transcript, assetId);
+        
+        if (transcript.containsIgnoreCase('zoom') && transcript.containsIgnoreCase('capacitor')) response.clientAction = 'CAMERA_ZOOM_CAPACITOR';
+        else if (transcript.containsIgnoreCase('voltage')) response.clientAction = 'SHOW_OVERLAY_VOLTAGE';
+        else if (transcript.containsIgnoreCase('reset')) response.clientAction = 'RESET_VIEW';
+        
+        response.audioBase64 = generateElevenLabsAudio(response.textResponse);
+        return response;
+    }
+
+    private static String invokeAgentEngine(String transcript, String assetId) {
+        Asset a = [SELECT SerialNumber, Description, Name FROM Asset WHERE Id = :assetId OR Name = :assetId LIMIT 1];
+        if (transcript.containsIgnoreCase('status')) return 'Asset ' + a.Name + ' status is nominal.';
+        if (transcript.containsIgnoreCase('why')) return 'I detected a resistance spike and visual smoke confirmation.';
+        return 'Processing command for ' + a.Name;
+    }
+    
+    private static String generateElevenLabsAudio(String text) {
+        String API_KEY = ''; // Replace with your key
+        String VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; 
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint('https://api.elevenlabs.io/v1/text-to-speech/' + VOICE_ID);
+        req.setMethod('POST');
+        req.setHeader('xi-api-key', API_KEY);
+        req.setHeader('Content-Type', 'application/json');
+        Map<String, Object> payload = new Map<String, Object>{'text' => text, 'model_id' => 'eleven_monolingual_v1'};
+        req.setBody(JSON.serialize(payload));
+        try {
+            HttpResponse res = new Http().send(req);
+            if (res.getStatusCode() == 200) return EncodingUtil.base64Encode(res.getBodyAsBlob());
+        } catch (Exception e) {}
+        return null;
+    }
+    
+    global class VoiceResponse {
+        public String textResponse;
+        public String audioBase64;
+        public String clientAction;
+    }
+}

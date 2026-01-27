@@ -1,0 +1,95 @@
+public with sharing class HybridAutomatedService {
+    
+    @InvocableMethod(label='Execute Hybrid Remediation')
+    public static List<String> executeFullRemediation(List<String> assetIds) {
+        List<String> results = new List<String>();
+        for(String assetIdentifier : assetIds) {
+            try {
+                processAsset(assetIdentifier);
+                // Return a success message for the Agent to read
+                results.add('Success: Remediation protocol initiated for Asset ' + assetIdentifier);
+            } catch (Exception e) {
+                // Return error message so Agent knows it failed
+                results.add('Error: ' + e.getMessage());
+            }
+        }
+        return results;
+    }
+
+    public static void processAsset(String assetIdentifier) {
+        // IMPROVED QUERY: Look for Asset by Name OR SerialNumber OR Id
+        Asset a;
+        try {
+            a = [SELECT Id, Last_Camera_Snapshot_Base64__c, SerialNumber 
+                 FROM Asset 
+                 WHERE Name = :assetIdentifier 
+                    OR SerialNumber = :assetIdentifier 
+                    OR Id = :assetIdentifier 
+                 LIMIT 1];
+        } catch (QueryException e) {
+            // If no asset is found, stop execution
+            throw new CalloutException('Error: No Asset found matching "' + assetIdentifier + '"');
+        }
+        
+        // 1. Validate Threat via Google Vision
+        // Handle null Base64 gracefully
+        if (a.Last_Camera_Snapshot_Base64__c != null) {
+             if (!EinsteinVisionService.predictThreat(a.Last_Camera_Snapshot_Base64__c)) return;
+        }
+
+        // 2. Check Inventory
+        List<ProductItem> stock = [SELECT Id, LocationId FROM ProductItem WHERE Product2.ProductCode = 'CAP-365-HV' AND QuantityOnHand > 0 LIMIT 1];
+        
+        String caseDescription = 'Agentforce detected TRRS spike & Smoke.' + (stock.isEmpty() ? ' NO STOCK.' : ' Allocated Loc: ' + stock[0].LocationId);
+
+        // 3. Create Case & Work Order
+        // CRITICAL FIX: Use 'a.Id' (the real Salesforce ID) instead of 'assetIdentifier' (which might be just a Name like "HB-001")
+        Case ticket = new Case(
+            Subject = 'Thermal Runaway: ' + a.SerialNumber, 
+            Status = 'New', 
+            Priority = 'Critical', 
+            AssetId = a.Id, 
+            Description = caseDescription, 
+            Origin = 'Agentforce_IoT'
+        );
+        insert ticket;
+
+        WorkOrder wo = new WorkOrder(
+            Subject = 'Replace Capacitor - Urgent', 
+            CaseId = ticket.Id, 
+            AssetId = a.Id, 
+            Priority = 'Critical'
+        );
+        insert wo;
+        
+        // ADDED BACK: Service Appointment Creation
+        ServiceAppointment sa = new ServiceAppointment(
+            ParentRecordId = wo.Id, 
+            EarliestStartTime = DateTime.now(), 
+            DueDate = DateTime.now().addHours(2), 
+            Status = 'Scheduled'
+        );
+        insert sa;
+        
+        // 4. Send IoT Command using the Real ID
+        sendIoTCommand(a.Id, 'DERATE', '70%');
+    }
+
+    @future(callout=true)
+    private static void sendIoTCommand(String id, String cmd, String val) {
+        // IMPORTANT: Update this URL with your actual Cloud Run Backend URL if needed
+        String ENDPOINT = 'https://crm-kinetic-backend-be3-80514976508.us-central1.run.app/api/command'; 
+        
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint(ENDPOINT); 
+        req.setMethod('POST');
+        req.setHeader('Content-Type', 'application/json');
+        req.setBody('{"asset_id":"' + id + '", "command":"' + cmd + '", "value":"' + val + '"}');
+        
+        try { 
+            new Http().send(req); 
+        } catch(Exception e) {
+            System.debug('IoT Command Error: ' + e.getMessage());
+        }
+    }
+}
